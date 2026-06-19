@@ -53,7 +53,9 @@ public struct AppConfig: Sendable {
 
     // MARK: - Loading
 
-    public static func load() -> AppConfig {
+    /// Resolved path of `config.toml` (honoring `XDG_CONFIG_HOME`). Shared by
+    /// `load()` and `save()` so reads and writes can never diverge.
+    public static func configURL() -> URL {
         let env = ProcessInfo.processInfo.environment
         let base: URL
         if let xdg = env["XDG_CONFIG_HOME"], !xdg.isEmpty {
@@ -62,11 +64,85 @@ public struct AppConfig: Sendable {
             base = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".config")
         }
-        let path = base.appendingPathComponent("ai-usagebar").appendingPathComponent("config.toml")
+        return base.appendingPathComponent("ai-usagebar").appendingPathComponent("config.toml")
+    }
+
+    public static func load() -> AppConfig {
+        let path = configURL()
         guard let raw = try? String(contentsOf: path, encoding: .utf8) else {
             return AppConfig()
         }
         return parse(raw)
+    }
+
+    // MARK: - Saving
+
+    /// Serialize to `config.toml`, creating the parent directory if needed.
+    /// Writes only the fields this UI manages; round-trips through `parse`.
+    public func save() throws {
+        let url = AppConfig.configURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try serialize().write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Render the config as the flat-table TOML subset `parse` understands.
+    /// Comments and unknown keys from a hand-edited file are not preserved —
+    /// this app owns the file once Settings writes to it. Exposed for tests.
+    public func serialize() -> String {
+        var out = "# Managed by AI UsageBar Settings. Hand edits may be overwritten.\n\n"
+
+        if let primary {
+            out += "[ui]\n"
+            out += "primary = \(Self.quote(primary.rawValue))\n\n"
+        }
+
+        out += "[anthropic]\n"
+        out += "enabled = \(anthropicEnabled)\n"
+        if let p = anthropicCredentialsPath, !p.isEmpty {
+            out += "credentials_path = \(Self.quote(p))\n"
+        }
+        out += "\n"
+
+        out += "[openai]\n"
+        out += "enabled = \(openaiEnabled)\n"
+        if let p = codexAuthPath, !p.isEmpty {
+            out += "codex_auth_path = \(Self.quote(p))\n"
+        }
+        out += "\n"
+
+        out += "[zai]\n"
+        out += "enabled = \(zaiEnabled)\n"
+        out += "api_key_env = \(Self.quote(zaiApiKeyEnv))\n"
+        if let k = zaiApiKey, !k.isEmpty { out += "api_key = \(Self.quote(k))\n" }
+        if let t = zaiPlanTier, !t.isEmpty { out += "plan_tier = \(Self.quote(t))\n" }
+        out += "\n"
+
+        out += "[openrouter]\n"
+        out += "enabled = \(openrouterEnabled)\n"
+        out += "api_key_env = \(Self.quote(openrouterApiKeyEnv))\n"
+        if let k = openrouterApiKey, !k.isEmpty { out += "api_key = \(Self.quote(k))\n" }
+        out += "\n"
+
+        out += "[deepseek]\n"
+        out += "enabled = \(deepseekEnabled)\n"
+        out += "api_key_env = \(Self.quote(deepseekApiKeyEnv))\n"
+        if let k = deepseekApiKey, !k.isEmpty { out += "api_key = \(Self.quote(k))\n" }
+        out += "\n"
+
+        return out
+    }
+
+    /// Wrap a value in TOML basic-string quotes. Backslashes and double quotes
+    /// are escaped so the value survives a `parse` round-trip; the simple line
+    /// parser drops a bare `#`, so anything else stays literal.
+    private static func quote(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     /// Parse the flat-table TOML subset this app understands. Exposed for tests.
@@ -135,9 +211,22 @@ public struct AppConfig: Sendable {
     }
 
     private static func unquote(_ v: String) -> String {
-        if v.count >= 2, v.hasPrefix("\""), v.hasSuffix("\"") {
-            return String(v.dropFirst().dropLast())
+        guard v.count >= 2, v.hasPrefix("\""), v.hasSuffix("\"") else { return v }
+        let inner = v.dropFirst().dropLast()
+        // Decode the escapes `serialize`/`quote` emit: `\\` and `\"`.
+        var out = ""
+        var escaping = false
+        for ch in inner {
+            if escaping {
+                out.append(ch) // `\\` -> `\`, `\"` -> `"`, others kept literal
+                escaping = false
+            } else if ch == "\\" {
+                escaping = true
+            } else {
+                out.append(ch)
+            }
         }
-        return v
+        if escaping { out.append("\\") }
+        return out
     }
 }

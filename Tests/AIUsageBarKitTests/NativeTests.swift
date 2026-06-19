@@ -78,6 +78,38 @@ final class NativeTests: XCTestCase {
         XCTAssertEqual(c.deepseekApiKey, "sk-ds")
     }
 
+    func testConfigSerializeRoundTrips() {
+        var c = AppConfig()
+        c.primary = .zai
+        c.openaiEnabled = false
+        c.deepseekEnabled = true
+        c.zaiApiKey = "sk-zai-inline"
+        c.zaiPlanTier = "pro"
+        c.deepseekApiKey = "sk-ds"
+
+        let back = AppConfig.parse(c.serialize())
+        XCTAssertEqual(back.primary, .zai)
+        XCTAssertFalse(back.isEnabled(.openai))
+        XCTAssertTrue(back.isEnabled(.deepseek))
+        XCTAssertEqual(back.zaiApiKey, "sk-zai-inline")
+        XCTAssertEqual(back.zaiPlanTier, "pro")
+        XCTAssertEqual(back.deepseekApiKey, "sk-ds")
+    }
+
+    func testConfigSerializeEscapesSpecialCharacters() {
+        var c = AppConfig()
+        // A value with a quote and a backslash must survive the round-trip.
+        c.zaiApiKey = #"a\b"c"#
+        let back = AppConfig.parse(c.serialize())
+        XCTAssertEqual(back.zaiApiKey, #"a\b"c"#)
+    }
+
+    func testConfigOmitsEmptyInlineKeys() {
+        let c = AppConfig() // no inline keys set
+        let text = c.serialize()
+        XCTAssertFalse(text.contains("api_key ="), "empty inline keys should not be written")
+    }
+
     func testResolveKeyPrefersEnv() {
         XCTAssertEqual(AppConfig.resolveKey(env: "", inline: "inline"), "inline")
         XCTAssertNil(AppConfig.resolveKey(env: "AIUB_TEST_MISSING_VAR_XYZ", inline: nil))
