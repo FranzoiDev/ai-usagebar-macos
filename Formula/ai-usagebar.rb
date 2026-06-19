@@ -10,9 +10,7 @@ class AiUsagebar < Formula
   desc "Native macOS menu bar app that surfaces AI plan usage"
   homepage "https://github.com/FranzoiDev/ai-usagebar-macos"
   url "https://github.com/FranzoiDev/ai-usagebar-macos/archive/refs/tags/v0.1.0.tar.gz"
-  # After `git push --tags`, fill this in with:
-  #   curl -fsSL <url above> | shasum -a 256
-  sha256 "FILL_AFTER_TAGGING"
+  sha256 "e79996a7778773d603e978b38fee509d0cb734ad2247e7b89af04475f7cb89ef"
   license "MIT"
   head "https://github.com/FranzoiDev/ai-usagebar-macos.git", branch: "main"
 
