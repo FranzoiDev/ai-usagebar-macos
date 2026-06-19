@@ -52,7 +52,12 @@ swift test         # unit tests for the data layer
 
 Optional. Mirrors upstream `ai-usagebar`'s `~/.config/ai-usagebar/config.toml`
 (honoring `$XDG_CONFIG_HOME`). Every field has a sensible default, so the file
-is only needed to disable a vendor, choose the primary, or inline an API key:
+is only needed to disable a vendor, choose the primary, or inline an API key.
+
+The common options — primary vendor, per-vendor enable, inline API keys, and
+launch-at-login — can be set from the dropdown's **gear** (bottom-right), which
+reads and writes this same file. Hand edits to keys the UI doesn't surface
+(paths, `api_key_env`, `plan_tier`) are preserved; comments are not.
 
 ```toml
 [ui]

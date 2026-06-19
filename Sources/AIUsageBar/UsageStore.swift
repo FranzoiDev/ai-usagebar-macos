@@ -16,11 +16,18 @@ final class UsageStore: ObservableObject {
     /// undocumented endpoints rate-limit below ~300s, so don't go lower.
     let refreshInterval: TimeInterval = 60
 
-    private let client = NativeUsageClient()
+    private var client = NativeUsageClient()
     private var timer: Timer?
 
     init() {
         start()
+    }
+
+    /// Re-read `config.toml` (after Settings saves) and refresh immediately so
+    /// vendor/primary/key changes take effect without restarting the app.
+    func reloadConfig() {
+        client = NativeUsageClient()
+        Task { await refresh() }
     }
 
     private func start() {

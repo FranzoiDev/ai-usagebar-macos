@@ -7,6 +7,9 @@ struct MenuContentView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var loginItem: LoginItemManager
 
+    /// Lazily created on first gear click; owns the desktop settings window.
+    @State private var settingsController: SettingsWindowController?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if store.rows.isEmpty {
@@ -22,19 +25,6 @@ struct MenuContentView: View {
                     VendorRowView(usage: usage)
                 }
             }
-
-            Divider()
-
-            Toggle(isOn: Binding(
-                get: { loginItem.isEnabled },
-                set: { loginItem.setEnabled($0) }
-            )) {
-                Text("Launch at Login")
-                    .font(.callout)
-            }
-            .toggleStyle(.checkbox)
-            .disabled(loginItem.isUnavailable)
-            .onAppear { loginItem.refresh() }
 
             Divider()
             footer
@@ -61,11 +51,27 @@ struct MenuContentView: View {
             }
 
             Button {
+                openSettings()
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+                    .labelStyle(.iconOnly)
+            }
+            .help("Settings")
+
+            Button {
                 NSApplication.shared.terminate(nil)
             } label: {
                 Label("Quit", systemImage: "power")
             }
         }
+    }
+
+    /// Open (or focus) the settings window, creating its controller on first use.
+    private func openSettings() {
+        let controller = settingsController
+            ?? SettingsWindowController(loginItem: loginItem, onSaved: { store.reloadConfig() })
+        settingsController = controller
+        controller.show()
     }
 }
 
