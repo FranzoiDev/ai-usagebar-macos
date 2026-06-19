@@ -5,6 +5,7 @@ import AIUsageBarKit
 /// The dropdown shown when the menu bar item is clicked.
 struct MenuContentView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var loginItem: LoginItemManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -21,6 +22,19 @@ struct MenuContentView: View {
                     VendorRowView(usage: usage)
                 }
             }
+
+            Divider()
+
+            Toggle(isOn: Binding(
+                get: { loginItem.isEnabled },
+                set: { loginItem.setEnabled($0) }
+            )) {
+                Text("Launch at Login")
+                    .font(.callout)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(loginItem.isUnavailable)
+            .onAppear { loginItem.refresh() }
 
             Divider()
             footer

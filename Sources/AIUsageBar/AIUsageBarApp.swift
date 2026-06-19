@@ -7,10 +7,11 @@ import SwiftUI
 @main
 struct AIUsageBarApp: App {
     @StateObject private var store = UsageStore()
+    @StateObject private var loginItem = LoginItemManager()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(store: store)
+            MenuContentView(store: store, loginItem: loginItem)
         } label: {
             Text(store.title)
         }
