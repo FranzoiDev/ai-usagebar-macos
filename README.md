@@ -41,12 +41,43 @@ vendor endpoints and OAuth flows. Full attribution in [Credits](#credits) and
 
 No Rust toolchain, no CLI install — nothing beyond Swift to build and run.
 
+## Install
+
+```bash
+brew install franzoidev/tap/ai-usagebar
+ai-usagebar   # start the menu bar app
+```
+
+The formula builds from source on your machine, so the binary is signed by your
+own toolchain and never quarantined — no Gatekeeper prompt, no notarization, no
+`xattr` dance. It needs the Xcode toolchain to compile (Command Line Tools alone
+may be missing SDK pieces).
+
+It's a menu bar agent — no Dock icon. For a reliable **Launch at Login**, copy
+it into `/Applications` first, then enable it from the app's gear ▸ Settings:
+
+```bash
+cp -R "$(brew --prefix)/opt/ai-usagebar/AIUsageBar.app" /Applications/
+```
+
 ## Run it (dev)
 
 ```bash
 swift run          # launch the app (shows a Dock icon in a dev build)
 swift test         # unit tests for the data layer
 ```
+
+## Cutting a release
+
+Distribution is a [Homebrew formula](Formula/ai-usagebar.rb) that compiles from
+a source tarball — there's no prebuilt binary to sign or upload.
+
+1. Bump `CFBundleShortVersionString` in `Resources/Info.plist`.
+2. Tag and push: `git tag v<version> && git push --tags`.
+3. Get the tarball checksum:
+   `curl -fsSL https://github.com/FranzoiDev/ai-usagebar-macos/archive/refs/tags/v<version>.tar.gz | shasum -a 256`
+4. Update `url`, `sha256` in `Formula/ai-usagebar.rb` and push it to the
+   `FranzoiDev/homebrew-tap` repo (path `Formula/ai-usagebar.rb`).
 
 ## Configuration
 
@@ -83,11 +114,6 @@ enabled = false               # disabled by default (no free tier)
 api_key_env = "DEEPSEEK_API_KEY"
 ```
 
-> **Gatekeeper:** unless you sign + notarize with a paid Apple Developer
-> account, first launch needs right-click → Open (or
-> `xattr -dr com.apple.quarantine AIUsageBar.app`). No signature is required to
-> *run* the app — only to skip that one-time prompt.
-
 ## How the data flows
 
 1. Every 60s (and on demand) `NativeUsageClient` fetches all enabled vendors
@@ -116,7 +142,7 @@ Sources/
     Models.swift       Severity / VendorUsage / UsageGauge
     Native/            the in-process data collection (port of ai-usagebar)
       NativeUsageClient.swift   orchestrator: fetch all vendors, pick primary
-      AppConfig.swift           config.toml reader + API-key resolution
+      AppConfig.swift           config.toml read/write + API-key resolution
       DiskCache.swift           per-vendor on-disk payload cache
       Keychain.swift            macOS login-Keychain access (security(1))
       AnthropicCreds.swift      Claude creds + OAuth token refresh
@@ -124,11 +150,15 @@ Sources/
       Support.swift             countdown / severity / money / HTTP / JSON
       AnthropicProvider.swift   …and one <Vendor>Provider.swift per vendor
   AIUsageBar/      the SwiftUI app
-    AIUsageBarApp.swift   @main MenuBarExtra scene
-    UsageStore.swift      ObservableObject + refresh loop
-    MenuContentView.swift dropdown UI
+    AIUsageBarApp.swift            @main MenuBarExtra scene
+    UsageStore.swift              ObservableObject + refresh loop
+    MenuContentView.swift         dropdown UI (gear opens Settings)
+    SettingsView.swift            config editor (vendors, keys, login item)
+    SettingsWindowController.swift hosts Settings in a desktop window
+    LoginItemManager.swift        launch-at-login via SMAppService
 Tests/AIUsageBarKitTests/   XCTest for the kit
 Resources/Info.plist        bundle plist (LSUIElement)
+Formula/ai-usagebar.rb      Homebrew formula (builds from source)
 ```
 
 ## Credits
