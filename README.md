@@ -48,15 +48,6 @@ swift run          # launch the app (shows a Dock icon in a dev build)
 swift test         # unit tests for the data layer
 ```
 
-## Build the .app
-
-```bash
-scripts/build_app.sh   # assemble dist/AIUsageBar.app
-```
-
-`dist/AIUsageBar.app` is a proper menu bar agent (`LSUIElement`, no Dock icon)
-and runs self-contained. Drag it to `/Applications`.
-
 ## Configuration
 
 Optional. Mirrors upstream `ai-usagebar`'s `~/.config/ai-usagebar/config.toml`
@@ -133,7 +124,6 @@ Sources/
     MenuContentView.swift dropdown UI
 Tests/AIUsageBarKitTests/   XCTest for the kit
 Resources/Info.plist        bundle plist (LSUIElement)
-scripts/build_app.sh        assemble dist/AIUsageBar.app
 ```
 
 ## Credits
