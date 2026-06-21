@@ -9,7 +9,7 @@ public enum AnthropicProvider {
 
     public static func fetch(config: AppConfig, now: Date = Date()) async -> VendorUsage {
         let path = AnthropicCreds.defaultPath(config.anthropicCredentialsPath)
-        guard var creds = try? AnthropicCreds.read(path: path) else {
+        guard let creds = try? AnthropicCreds.read(path: path) else {
             return .unavailable(.anthropic)
         }
         let planLabel = creds.planLabel
@@ -20,21 +20,14 @@ public enum AnthropicProvider {
             return render(bytes, plan: planLabel, now: now)
         }
 
-        // Maybe refresh the access token.
-        let nowSecs = Int64(now.timeIntervalSince1970)
-        if AnthropicOAuth.needsRefresh(expiresAtSecs: creds.expiresAtSecs, now: nowSecs) {
-            do {
-                let r = try await AnthropicOAuth.refresh(refreshToken: creds.refreshToken)
-                creds.accessToken = r.accessToken
-                if let rt = r.refreshToken { creds.refreshToken = rt }
-                creds.expiresAtMs = Int64(now.timeIntervalSince1970 * 1000) + r.expiresInSecs * 1000
-                creds.writeBack(path: path)
-            } catch {
-                // Refresh failed — reuse cache if we have any, else unavailable.
-                if let bytes = cache.maybePayload() { return render(bytes, plan: planLabel, now: now) }
-                return .unavailable(.anthropic)
-            }
-        }
+        // Read-only on credentials: never refresh the OAuth token ourselves.
+        // Anthropic rotates refresh tokens, so refreshing here would invalidate
+        // the copy Claude Code holds in memory and log the user out of the CLI
+        // (see writeBack/AnthropicOAuth, kept for reference but intentionally
+        // not invoked). We let `claude` own token rotation and just ride along
+        // with whatever access token it has persisted. If that token is expired
+        // the live fetch below 401s and we fall back to cache / unavailable
+        // until the CLI refreshes it.
 
         // Live fetch.
         do {

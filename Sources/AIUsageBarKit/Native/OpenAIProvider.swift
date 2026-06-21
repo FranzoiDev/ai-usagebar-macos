@@ -8,7 +8,7 @@ public enum OpenAIProvider {
 
     public static func fetch(config: AppConfig, now: Date = Date()) async -> VendorUsage {
         let path = CodexCreds.defaultPath(config.codexAuthPath)
-        guard var creds = try? CodexCreds.read(path: path) else {
+        guard let creds = try? CodexCreds.read(path: path) else {
             return .unavailable(.openai)
         }
         let cache = DiskCache(vendor: "openai")
@@ -18,19 +18,14 @@ public enum OpenAIProvider {
             return render(bytes, planHint: planHint, now: now)
         }
 
-        let nowSecs = Int64(now.timeIntervalSince1970)
-        if CodexOAuth.needsRefresh(expiresAtSecs: creds.expiresAtSecs, now: nowSecs) {
-            do {
-                let r = try await CodexOAuth.refresh(refreshToken: creds.refreshToken)
-                creds.accessToken = r.accessToken
-                if let rt = r.refreshToken { creds.refreshToken = rt }
-                if let id = r.idToken { creds.idToken = id }
-                creds.writeBack(path: path)
-            } catch {
-                if let bytes = cache.maybePayload() { return render(bytes, planHint: planHint, now: now) }
-                return .unavailable(.openai)
-            }
-        }
+        // Read-only on credentials: never refresh the OAuth token ourselves.
+        // Codex rotates refresh tokens, so refreshing here would invalidate the
+        // copy the `codex` CLI holds in memory and log the user out (see
+        // writeBack/CodexOAuth, kept for reference but intentionally not
+        // invoked). We let `codex` own token rotation and ride along with
+        // whatever access token it has persisted. If that token is expired the
+        // live fetch below 401s and we fall back to cache / unavailable until
+        // the CLI refreshes it.
 
         do {
             var headers = [
