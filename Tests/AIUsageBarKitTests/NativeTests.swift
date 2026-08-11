@@ -146,6 +146,29 @@ final class NativeTests: XCTestCase {
         XCTAssertEqual(AnthropicCreds.parse(raw)?.expiresAtMs, 5000)
     }
 
+    func testUnusablePredicateIsNarrow() {
+        func creds(_ access: String, _ refresh: String, _ ms: Int64) -> AnthropicCreds {
+            AnthropicCreds(accessToken: access, refreshToken: refresh, expiresAtMs: ms,
+                           subscriptionType: "", rateLimitTier: "")
+        }
+        // Everything dead → unusable (the leftover zeroed pre-Keychain file).
+        XCTAssertTrue(creds("", "", 0).isUnusable)
+        XCTAssertTrue(creds(" ", " ", -1).isUnusable)
+        // Trusted-device shape: live access token, empty refresh → authoritative.
+        XCTAssertFalse(creds("AT", "", 0).isUnusable)
+        XCTAssertFalse(creds("", "RT", 0).isUnusable)
+        XCTAssertFalse(creds("", "", 1000).isUnusable)
+    }
+
+    func testSameOriginRedirectPolicy() {
+        func url(_ s: String) -> URL { URL(string: s)! }
+        XCTAssertTrue(HTTP.sameOrigin(url("https://api.x.ai/a"), url("https://api.x.ai/b")))
+        XCTAssertTrue(HTTP.sameOrigin(url("https://api.x.ai/a"), url("https://api.x.ai:443/b")))
+        XCTAssertFalse(HTTP.sameOrigin(url("https://api.x.ai/a"), url("https://evil.example/b")))
+        XCTAssertFalse(HTTP.sameOrigin(url("https://api.x.ai/a"), url("http://api.x.ai/b")))
+        XCTAssertFalse(HTTP.sameOrigin(url("https://api.x.ai/a"), url("https://api.x.ai:8443/b")))
+    }
+
     func testRefreshBuffer() {
         let now: Int64 = 1_000_000
         XCTAssertTrue(AnthropicOAuth.needsRefresh(expiresAtSecs: now + 100, now: now))

@@ -34,23 +34,66 @@ public struct AnthropicCreds {
             .appendingPathComponent(".credentials.json")
     }
 
+    /// The issue-#15 predicate: only a blob where *everything* is dead is
+    /// unusable. The trusted-device shape (live access token, empty refresh
+    /// token) stays authoritative.
+    public var isUnusable: Bool {
+        accessToken.trimmingCharacters(in: .whitespaces).isEmpty
+            && refreshToken.trimmingCharacters(in: .whitespaces).isEmpty
+            && expiresAtMs <= 0
+    }
+
     // MARK: - Reading
 
-    /// Read from the file, falling back to the macOS Keychain. Throws
-    /// `.credentials` when neither source yields a usable blob.
+    /// Read from the file, falling back to the macOS Keychain (mirrors
+    /// upstream `creds::read_default_with`):
+    ///   - usable file → file (no `security` subprocess at all);
+    ///   - file missing, unusable (a leftover zeroed pre-Keychain blob), or
+    ///     unparseable → Keychain;
+    ///   - an unreadable Keychain (locked, ACL denied) is an error, never
+    ///     silently "not logged in";
+    ///   - with the Keychain absent, the file's own outcome stands.
     public static func read(path: URL) throws -> AnthropicCreds {
-        let raw: String
-        if let fileRaw = try? String(contentsOf: path, encoding: .utf8) {
-            raw = fileRaw
-        } else if let kc = Keychain.readRaw() {
-            raw = kc
-        } else {
-            throw FetchError.credentials("no Claude credentials. Run `claude` to authenticate.")
+        let fileCreds = (try? String(contentsOf: path, encoding: .utf8)).flatMap(parse)
+        if let fileCreds, !fileCreds.isUnusable { return fileCreds }
+
+        switch Keychain.read() {
+        case .found(let raw):
+            if let creds = parse(raw), !creds.isUnusable { return creds }
+        case .failure(let message):
+            throw FetchError.credentials(message)
+        case .notFound:
+            break
         }
-        guard let creds = parse(raw) else {
-            throw FetchError.credentials("could not parse Claude credentials. Run `claude` to re-authenticate.")
+
+        // Keychain absent or dead too: surface the file's own state.
+        if let fileCreds { return fileCreds }
+        throw FetchError.credentials("no Claude credentials. Run `claude` to authenticate.")
+    }
+
+    /// Read a named account (`[[anthropic.accounts]]` / `accounts_dir`),
+    /// mirrors upstream `creds::read_named_with`. Keychain FIRST: on macOS a
+    /// `CLAUDE_CONFIG_DIR`-scoped `claude` login always writes to the
+    /// dir-hashed Keychain item, never to `<dir>/.credentials.json` — a file
+    /// there is a hand-copied snapshot whose refresh-token lineage rotates
+    /// and dies with a 401 within hours. The file is only the fallback (the
+    /// Linux layout).
+    public static func readNamed(_ account: AnthropicAccount) throws -> AnthropicCreds {
+        switch Keychain.read(service: Keychain.serviceName(forConfigDir: account.configDir)) {
+        case .found(let raw):
+            if let creds = parse(raw), !creds.isUnusable { return creds }
+        case .failure(let message):
+            throw FetchError.credentials(message)
+        case .notFound:
+            break
         }
-        return creds
+        let path = URL(fileURLWithPath: account.credentialsPath)
+        if let raw = try? String(contentsOf: path, encoding: .utf8), let creds = parse(raw) {
+            return creds
+        }
+        throw FetchError.credentials(
+            "no credentials for Claude account \"\(account.label)\". "
+            + "Run CLAUDE_CONFIG_DIR=\(account.configDir) claude to sign in.")
     }
 
     static func parse(_ raw: String) -> AnthropicCreds? {

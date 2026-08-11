@@ -30,6 +30,15 @@ struct SettingsView: View {
         .init(vendor: .zai, enabled: \.zaiEnabled, apiKey: \.zaiApiKey),
         .init(vendor: .openrouter, enabled: \.openrouterEnabled, apiKey: \.openrouterApiKey),
         .init(vendor: .deepseek, enabled: \.deepseekEnabled, apiKey: \.deepseekApiKey),
+        .init(vendor: .kimi, enabled: \.kimiEnabled, apiKey: \.kimiApiKey),
+        .init(vendor: .minimax, enabled: \.minimaxEnabled, apiKey: \.minimaxApiKey),
+        .init(vendor: .kilo, enabled: \.kiloEnabled, apiKey: \.kiloApiKey),
+        .init(vendor: .novita, enabled: \.novitaEnabled, apiKey: \.novitaApiKey),
+        .init(vendor: .moonshot, enabled: \.moonshotEnabled, apiKey: \.moonshotApiKey),
+        .init(vendor: .grok, enabled: \.grokEnabled, apiKey: \.grokApiKey),
+        .init(vendor: .anthropicAPI, enabled: \.anthropicAPIEnabled, apiKey: \.anthropicAPIKey),
+        .init(vendor: .cursor, enabled: \.cursorEnabled, apiKey: nil),
+        .init(vendor: .antigravity, enabled: \.antigravityEnabled, apiKey: nil),
     ]
 
     var body: some View {
@@ -71,6 +80,15 @@ struct SettingsView: View {
                 }
             }
             Text("Which vendor headlines the menu bar title.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Picker("Indicator style", selection: $cfg.uiIndicatorStyle) {
+                Text("Bars").tag(IndicatorStyle.bars)
+                Text("Rings").tag(IndicatorStyle.ring)
+            }
+            Toggle("Show pace marker", isOn: boolBinding(\.uiPaceMarker))
+                .toggleStyle(.checkbox)
+            Text("A tick at each window's elapsed-time position; usage past it shows in the warning color.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

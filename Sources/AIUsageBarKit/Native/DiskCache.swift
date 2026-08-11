@@ -28,6 +28,31 @@ public struct DiskCache: Sendable {
     }
 
     private var payloadPath: URL { dir.appendingPathComponent("usage.json") }
+    private var targetPath: URL { dir.appendingPathComponent("target") }
+
+    /// The fingerprint of what the cached payload was fetched for (account,
+    /// region, key, billing month, …). A payload recorded under a different
+    /// target is never served — a key or account switch must refetch instead
+    /// of showing the previous identity's numbers.
+    public func recordedTarget() -> String? {
+        try? String(contentsOf: targetPath, encoding: .utf8)
+    }
+
+    public func freshPayload(ttl: TimeInterval, target: String) -> Data? {
+        guard recordedTarget() == target else { return nil }
+        return freshPayload(ttl: ttl)
+    }
+
+    public func maybePayload(target: String) -> Data? {
+        guard recordedTarget() == target else { return nil }
+        return maybePayload()
+    }
+
+    public func writePayload(_ data: Data, target: String) {
+        ensureDir()
+        try? target.write(to: targetPath, atomically: true, encoding: .utf8)
+        writePayload(data)
+    }
 
     private func ensureDir() {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

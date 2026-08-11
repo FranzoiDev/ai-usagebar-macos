@@ -1,8 +1,12 @@
 # AI UsageBar
 
-A native macOS **menu bar** app that shows your AI plan usage (Anthropic Claude,
-OpenAI Codex, Z.AI, OpenRouter, DeepSeek) right next to the battery icon — no
-subscription, no extra account.
+A native macOS **menu bar** app that shows your AI plan usage right next to the
+battery icon — no subscription, no extra account.
+
+Vendors: Anthropic Claude (including multiple accounts and Claude Desktop
+profiles, with model-scoped weekly limits like the Fable cap), OpenAI Codex,
+Z.AI, OpenRouter, DeepSeek, Kimi, MiniMax, Kilo, Novita, Moonshot, Grok (xAI),
+Anthropic Admin API (Console spend), Cursor, and Google Antigravity.
 
 It's fully self-contained. All the data collection — reading the OAuth
 credentials your `claude` / `codex` CLIs already wrote, the macOS Keychain
@@ -33,10 +37,14 @@ vendor endpoints and OAuth flows. Full attribution in [Credits](#credits) and
 ## Requirements
 
 - macOS 13 Ventura or newer (for `MenuBarExtra`).
-- Log in once with the official CLIs so the credentials exist:
-  - `claude` (Anthropic) — token auto-refreshes; on macOS it's read from the login Keychain.
+- Log in once with the official CLIs/apps so the credentials exist:
+  - `claude` (Anthropic) — on macOS the token is read from the login Keychain.
   - `codex login` (OpenAI).
-  - Z.AI / OpenRouter / DeepSeek use API keys via env vars or a `config.toml`
+  - Cursor: sign in to the IDE (or `cursor-agent`) once; the session token is
+    read locally, read-only.
+  - Antigravity: no credentials — quota is served by the locally running app,
+    IDE, or `agy` session.
+  - The other vendors use API keys via env vars or a `config.toml`
     (see [Configuration](#configuration)).
 
 No Rust toolchain, no CLI install — nothing beyond Swift to build and run.
@@ -90,12 +98,24 @@ launch-at-login — can be set from the dropdown's **gear** (bottom-right), whic
 reads and writes this same file. Hand edits to keys the UI doesn't surface
 (paths, `api_key_env`, `plan_tier`) are preserved; comments are not.
 
+The file is watched: edits apply within a moment, no restart needed.
+
 ```toml
 [ui]
-primary = "anthropic"   # which vendor headlines the menu bar title
+primary = "anthropic"      # which vendor headlines the menu bar title
+pace_marker = true         # tick at each window's elapsed-time position
+indicator_style = "bars"   # or "ring"
 
 [anthropic]
 enabled = true
+# accounts_dir = "~/.config/ai-usagebar/accounts"  # auto-discover CLAUDE_CONFIG_DIRs
+# show_default_account = true                      # hide the unnamed login when false
+# desktop_profiles_dir = "~/.claude-acc/profiles"  # Claude Desktop (claude-acc) profiles
+
+# Extra named Claude accounts (see "Multiple Claude accounts" below):
+# [[anthropic.accounts]]
+# label = "work"
+# credentials_path = "~/.config/ai-usagebar/accounts/work/.credentials.json"
 
 [openai]
 enabled = true
@@ -109,25 +129,86 @@ api_key_env = "ZAI_API_KEY"   # env var wins over the inline key below
 enabled = true
 api_key_env = "OPENROUTER_API_KEY"
 
+# Everything below is opt-in (disabled by default) and needs a key or a local
+# install:
+
 [deepseek]
-enabled = false               # disabled by default (no free tier)
+enabled = false
 api_key_env = "DEEPSEEK_API_KEY"
+
+[kimi]
+enabled = false
+api_key_env = "KIMI_API_KEY"
+
+[minimax]
+enabled = false
+api_key_env = "MINIMAX_API_KEY"
+region = "global"             # or "cn" — separate instances, separate keys
+
+[kilo]
+enabled = false
+api_key_env = "KILO_API_KEY"
+# organization_id = "org_…"   # omit for the personal balance
+
+[novita]
+enabled = false
+api_key_env = "NOVITA_API_KEY"
+
+[moonshot]
+enabled = false
+api_key_env = "MOONSHOT_API_KEY"
+region = "global"             # "cn" switches host AND currency (CNY)
+
+[grok]
+enabled = false
+api_key_env = "XAI_MANAGEMENT_KEY"   # Management key, not the inference key
+# team_id = "…"               # required for organization-scoped keys
+
+[anthropic_api]
+enabled = false
+api_key_env = "ANTHROPIC_ADMIN_KEY"  # Console Admin key (sk-ant-admin01-…)
+# monthly_limit = 1000        # dollars; the API exposes no limit itself
+
+[cursor]
+enabled = false               # reads the IDE's local session, read-only
+
+[antigravity]
+enabled = false               # local server discovery via lsof
 ```
+
+### Multiple Claude accounts
+
+Keep several Claude Code logins side by side with per-account
+`CLAUDE_CONFIG_DIR`s (`CLAUDE_CONFIG_DIR=~/…/accounts/work claude` to sign in),
+then point `accounts_dir` at the parent directory — every subdirectory becomes
+its own row, with its own cache and Keychain item. Explicit
+`[[anthropic.accounts]]` entries win on a label clash. Saved **Claude Desktop**
+profiles (the [claude-acc](https://github.com/ohmaseclaro/claude-acc) layout)
+also appear as rows, labeled `· <name> (desktop)` — read-only: this app never
+rotates any credential.
 
 ## How the data flows
 
 1. Every 60s (and on demand) `NativeUsageClient` fetches all enabled vendors
    concurrently, in-process.
 2. Per vendor it reads the credentials (Anthropic from `~/.claude/.credentials.json`
-   or the login Keychain; OpenAI from `~/.codex/auth.json`; the rest from API
-   keys), refreshes the OAuth token if it's near expiry, and `GET`s the usage
-   endpoint via `URLSession`. Responses are cached on disk
-   (`~/.cache/ai-usagebar/<vendor>/`) with a 60s TTL and reused as a fallback
-   when a live fetch fails.
+   or the login Keychain — per-account Keychain items for named accounts, the
+   decrypted safeStorage blob for Claude Desktop profiles; OpenAI from
+   `~/.codex/auth.json`; Cursor from the IDE's `state.vscdb`; the rest from API
+   keys) and `GET`s the usage endpoint via `URLSession`. HTTP redirects are
+   restricted to the original origin so credential headers can't leak
+   cross-origin. Responses are cached on disk (`~/.cache/ai-usagebar/<vendor>/`)
+   with a 60s TTL, fingerprinted to the account/region/key they were fetched
+   for, and reused (marked ⏸ stale) as a fallback when a live fetch fails —
+   never past 7 days.
 3. Each vendor's response is rendered into a `VendorUsage` (headline + progress
    gauges + a `low`/`mid`/`high`/`critical` severity) and the rows are drawn.
+   Time-windowed gauges carry a **pace marker**: a blue tick at the window's
+   elapsed-time position — fill up to it is on pace, only the overshoot past it
+   is painted in the warning color.
 4. The menu bar title tracks the **primary** vendor (`[ui] primary` in
-   `config.toml`).
+   `config.toml`) with a compact reset countdown ("42% 2h"); the eye toggle on
+   each row excludes it from the title.
 
 The vendor catalog (names, short codes) lives in
 `Sources/AIUsageBarKit/Vendor.swift`; each vendor's fetch + render logic lives
