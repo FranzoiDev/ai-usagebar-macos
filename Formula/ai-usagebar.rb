@@ -9,8 +9,8 @@
 class AiUsagebar < Formula
   desc "Native macOS menu bar app that surfaces AI plan usage"
   homepage "https://github.com/FranzoiDev/ai-usagebar-macos"
-  url "https://github.com/FranzoiDev/ai-usagebar-macos/archive/refs/tags/v0.1.1.tar.gz"
-  sha256 "036a8adc318e7ff0af848eace970db28cdafc9210a5efafbc7658ecc98167f6d"
+  url "https://github.com/FranzoiDev/ai-usagebar-macos/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "96e85630ff5a3c1f657efbc7b917b906f6d58122b3108355fd5ef39e7aad5b15"
   license "MIT"
   head "https://github.com/FranzoiDev/ai-usagebar-macos.git", branch: "main"
 
